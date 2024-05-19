@@ -1,4 +1,6 @@
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
@@ -17,4 +19,9 @@ function authenticateToken(req, res, next) {
   });
 }
 
-module.exports = { authenticateToken };
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+module.exports = { authenticateToken , upload};
+
+
+

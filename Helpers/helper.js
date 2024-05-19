@@ -2,16 +2,7 @@
 const sharp = require("sharp");
 const multer = require("multer");
 
-const generateEmployeeID = () => {
-  const min = 1000;
-  const max = 9999;
-  return "DB" + Math.floor(Math.random() * (max - min + 1) + min);
-};
 
-const isEmployeeIDUnique = async (employeeID) => {
-  const existingUser = await User.findOne({ employeeID });
-  return !existingUser;
-};
 
 const getCurrentDateAndTime = () => {
   const now = new Date();
@@ -60,43 +51,11 @@ const calculateElapsedTime = (checkInTime) => {
   return `${h}:${m}:${s}`;
 };
 
-const upload = () =>
-  multer({
-    fileFilter(req, file, cb) {
-      if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
-        return cb(new Error("Please upload an image file"));
-      }
-      cb(undefined, true);
-    },
-  }).single("avatar"); //for image upload
 
-  const resizeAndConvert = async (buffer) => {
-    try {
-      let resizedImageBuffer = buffer;
-      const imageInfo = await sharp(buffer).metadata();
-      const targetSize = 200;
-
-      resizedImageBuffer = await sharp(buffer)
-        .resize({
-          width: targetSize,
-          height: targetSize,
-          fit: "contain",
-          background: { r: 255, g: 255, b: 255, alpha: 1 },
-        })
-        .toFormat("webp")
-        .toBuffer();
-
-      return resizedImageBuffer;
-    } catch (error) {
-      throw new Error("Error resizing and converting image");
-    }
-  };
 
 module.exports={
-  generateEmployeeID,
-  isEmployeeIDUnique,
+
   getCurrentDateAndTime,
   calculateElapsedTime,
-  upload,
-  resizeAndConvert
+
 };

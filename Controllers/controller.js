@@ -5,11 +5,11 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
 const {
-  generateEmployeeID,
-  isEmployeeIDUnique,
+  // generateEmployeeID,
+  // isEmployeeIDUnique,
   getCurrentDateAndTime,
   calculateElapsedTime,
-  resizeAndConvert,
+  // resizeAndConvert,
 } = require("../Helpers/helper");
 
 async function createDesignation(req, res) {
@@ -109,6 +109,17 @@ async function createTransporter() {
   return transporter;
 }
 
+const generateEmployeeID = () => {
+  const min = 1000;
+  const max = 9999;
+  return "DB" + Math.floor(Math.random() * (max - min + 1) + min);
+};
+
+const isEmployeeIDUnique = async (employeeID) => {
+  const existingUser = await User.findOne({ employeeID });
+  return !existingUser;
+};
+
 const createAdmin = async (req, res) => {
   try {
     const { name, email, password, dob, bloodGroup } = req.body;
@@ -128,11 +139,6 @@ const createAdmin = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    let avatar = null;
-    if (req.file) {
-      const buffer = await resizeAndConvert(req.file.buffer);
-      avatar = buffer.toString("base64");
-    }
 
     const newUser = new User({
       name,
@@ -140,7 +146,6 @@ const createAdmin = async (req, res) => {
       password: hashedPassword,
       dob,
       bloodGroup,
-      avatar,
       isAdmin: true,
       employeeID,
     });
@@ -175,11 +180,6 @@ const createEmployee = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    let avatar = null;
-    if (req.file) {
-      const buffer = await resizeAndConvert(req.file.buffer);
-      avatar = buffer.toString("base64");
-    }
 
     const newUser = new User({
       name,
@@ -187,7 +187,6 @@ const createEmployee = async (req, res) => {
       password: hashedPassword,
       dob,
       bloodGroup,
-      avatar,
       employeeID,
     });
 
@@ -201,6 +200,36 @@ const createEmployee = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+const uploadAvatar = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const buffer = await resizeAndConvert(req.file.buffer);
+    const avatar = buffer.toString("base64");
+
+    user.avatar = avatar;
+    await user.save();
+
+    res.status(200).json({
+      status: 1,
+      message: "Avatar uploaded successfully",
+      avatar: user.avatar,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 
 const verifyIDAndRecordAttendance = async (req, res) => {
   const { employeeID, location } = req.body;
@@ -801,5 +830,6 @@ module.exports = {
   getCheckStatus,
   getElapsedTime,
   getAllUsers,
-  assignAdminRole
+  assignAdminRole,
+  uploadAvatar
 };

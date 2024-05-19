@@ -2,8 +2,6 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken } = require("../Middleware/middleware");
 const {
-  createAdmin,
-  createEmployee,
   verifyIDAndRecordAttendance,
   login,
   getNameByToken,
@@ -22,12 +20,18 @@ const {
   getCheckStatus,
   getElapsedTime,
   getAllUsers,
-  assignAdminRole
+  assignAdminRole,
+  createAdmin,
+  createEmployee,
+  uploadAvatar,
 } = require("../Controllers/controller"); //controller import
-const {upload}=require("../Helpers/helper")
+const {upload}= require("../Middleware/middleware")
 
-router.post("/signup/admin", upload, createAdmin);
-router.post("/signup/employee", upload, createEmployee);
+router.post("/signup/admin", createAdmin);
+router.post("/signup/employee", createEmployee);
+router.post("/upload-avatar/:userId", upload.single("avatar"), uploadAvatar);
+
+
 router.post("/api/verify", verifyIDAndRecordAttendance);
 router.post("/login", login);
 router.get("/api/get-name/:token", getNameByToken);
