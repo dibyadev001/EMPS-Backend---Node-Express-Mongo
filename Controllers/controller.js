@@ -5,11 +5,8 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
 const {
-  // generateEmployeeID,
-  // isEmployeeIDUnique,
   getCurrentDateAndTime,
   calculateElapsedTime,
-  // resizeAndConvert,
 } = require("../Helpers/helper");
 
 async function createDesignation(req, res) {
@@ -94,19 +91,6 @@ async function assignDesignation(req, res) {
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
   }
-}
-
-async function createTransporter() {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.ethereal.email",
-    port: 587,
-    auth: {
-      user: "arlo64@ethereal.email",
-      pass: "j1d9fyk1wyy6PWDhHv",
-    },
-  });
-
-  return transporter;
 }
 
 const generateEmployeeID = () => {
@@ -230,7 +214,6 @@ const uploadAvatar = async (req, res) => {
   }
 };
 
-
 const verifyIDAndRecordAttendance = async (req, res) => {
   const { employeeID, location } = req.body;
 
@@ -282,36 +265,7 @@ const verifyIDAndRecordAttendance = async (req, res) => {
   }
 };
 
-const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const token = jwt.sign(
-      { email: user.email, isAdmin: user.isAdmin },
-      "dibya",
-      { expiresIn: "3d" }
-    );
-
-    res.json({
-      status: 1,
-      message: "Login successful",
-      token,
-      userid: user._id,
-      user: user.isAdmin,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
 
 const getNameByToken = async (req, res) => {
   const { token } = req.params;
@@ -417,6 +371,7 @@ const getUserProfile = async (req, res) => {
       dob: user.dob,
       bloodGroup: user.bloodGroup,
       employeeID: user.employeeID,
+      designation:user.designation
     };
 
     res.json(userDetails);
@@ -424,6 +379,58 @@ const getUserProfile = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+const assignTask = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { task_name } = req.body;
+
+    if (!task_name) {
+      return res.status(400).json({ error: "Please provide a task name" });
+    }
+
+    // Check if the requester is authorized
+    const requesterEmail = req.user.email;
+    const requester = await User.findOne({ email: requesterEmail });
+    if (!requester) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    // Update user's tasks
+    await User.findByIdAndUpdate(userId, {
+      $push: {
+        tasks: {
+          task_name,
+          task_status: "Pending",
+          check_in_time: null,
+          check_out_time: null,
+        },
+      },
+    });
+
+    res.json({ status: 1, message: "Task assigned successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// Middleware to authenticate JWT token
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (token == null) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  jwt.verify(token, "dibya", (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    req.user = user;
+    next();
+  });
+}
 
 // Update task details
 const updateTaskDetails = async (req, res) => {
@@ -807,10 +814,7 @@ const getElapsedTime = async (req, res) => {
 };
 
 module.exports = {
-  createAdmin,
-  createEmployee,
   verifyIDAndRecordAttendance,
-  login,
   getNameByToken,
   getEmployeeID,
   createDesignation,
@@ -831,5 +835,6 @@ module.exports = {
   getElapsedTime,
   getAllUsers,
   assignAdminRole,
-  uploadAvatar
+  uploadAvatar,
+  assignTask
 };
