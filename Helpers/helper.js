@@ -1,8 +1,5 @@
 // helpers.js
 const sharp = require("sharp");
-const multer = require("multer");
-
-
 
 const getCurrentDateAndTime = () => {
   const now = new Date();
@@ -21,7 +18,6 @@ const getCurrentDateAndTime = () => {
     hour12: true,
   };
   const time = now.toLocaleTimeString("en-US", options);
-
   return { date, time };
 };
 

@@ -20,11 +20,12 @@ const {
   getElapsedTime,
   getAllUsers,
   assignAdminRole,
-
+  generateAttendanceReport,
   createDesignation,
   getDesignations,
   assignDesignation,
   assignTask,
+  generateSortedDatesByMonth,
 } = require("../Controllers/controller"); //controller import
 
 const {
@@ -75,5 +76,10 @@ router.get("/users", authenticateToken, getAllUsers);
 router.put("/assign-admin/:userId", authenticateToken, assignAdminRole);
 
 router.put("/assign-task/:userId", authenticateToken, assignTask);
+router.put("/assign-task/:userId", authenticateToken, assignTask);
+// router.get("/attendanceReport/:employeeId", authenticateToken, generateSortedDatesByMonth);
+router.get("/api/attendanceReport/:employeeId", authenticateToken, generateAttendanceReport);
+
+
 
 module.exports = router;

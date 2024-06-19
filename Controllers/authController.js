@@ -2,6 +2,8 @@ const { User } = require("../Models/schema");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const {resizeAndConvert}=require("../Helpers/helper")
+const {getCurrentDateAndTime}=require("../Helpers/helper")
+
 const generateEmployeeID = () => {
   const min = 1000;
   const max = 9999;
@@ -18,6 +20,7 @@ const createAdmin = async (req, res) => {
     const { name, email, password, dob, bloodGroup } = req.body;
     let employeeID;
     let isUnique = false;
+    const { date } = getCurrentDateAndTime();
 
     while (!isUnique) {
       employeeID = generateEmployeeID();
@@ -41,6 +44,7 @@ const createAdmin = async (req, res) => {
       bloodGroup,
       isAdmin: true,
       employeeID,
+      date_of_join:date
     });
 
     await newUser.save();

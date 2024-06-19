@@ -1,5 +1,7 @@
 const { Designation } = require("../Models/schema");
 const { User } = require("../Models/schema");
+const { Attendance } = require("../Models/schema");
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
@@ -93,126 +95,6 @@ async function assignDesignation(req, res) {
   }
 }
 
-const generateEmployeeID = () => {
-  const min = 1000;
-  const max = 9999;
-  return "DB" + Math.floor(Math.random() * (max - min + 1) + min);
-};
-
-const isEmployeeIDUnique = async (employeeID) => {
-  const existingUser = await User.findOne({ employeeID });
-  return !existingUser;
-};
-
-const createAdmin = async (req, res) => {
-  try {
-    const { name, email, password, dob, bloodGroup } = req.body;
-    let employeeID;
-    let isUnique = false;
-
-    while (!isUnique) {
-      employeeID = generateEmployeeID();
-      isUnique = await isEmployeeIDUnique(employeeID);
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ status: 0, message: "Email already exists" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = new User({
-      name,
-      email,
-      password: hashedPassword,
-      dob,
-      bloodGroup,
-      isAdmin: true,
-      employeeID,
-    });
-
-    await newUser.save();
-    res.status(201).json({
-      status: 1,
-      message: "Admin user created successfully",
-      employeeID: newUser.employeeID,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-const createEmployee = async (req, res) => {
-  try {
-    const { name, email, password, dob, bloodGroup } = req.body;
-    let employeeID;
-    let isUnique = false;
-
-    while (!isUnique) {
-      employeeID = generateEmployeeID();
-      isUnique = await isEmployeeIDUnique(employeeID);
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ status: 0, message: "Email already exists" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = new User({
-      name,
-      email,
-      password: hashedPassword,
-      dob,
-      bloodGroup,
-      employeeID,
-    });
-
-    await newUser.save();
-    res.status(201).json({
-      status: 1,
-      message: "User created successfully",
-      employeeID: newUser.employeeID,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-const uploadAvatar = async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const buffer = await resizeAndConvert(req.file.buffer);
-    const avatar = buffer.toString("base64");
-
-    user.avatar = avatar;
-    await user.save();
-
-    res.status(200).json({
-      status: 1,
-      message: "Avatar uploaded successfully",
-      avatar: user.avatar,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
 
 const verifyIDAndRecordAttendance = async (req, res) => {
   const { employeeID, location } = req.body;
@@ -371,7 +253,7 @@ const getUserProfile = async (req, res) => {
       dob: user.dob,
       bloodGroup: user.bloodGroup,
       employeeID: user.employeeID,
-      designation:user.designation
+      designation: user.designation
     };
 
     res.json(userDetails);
@@ -414,23 +296,6 @@ const assignTask = async (req, res) => {
   }
 };
 
-// Middleware to authenticate JWT token
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-
-  if (token == null) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  jwt.verify(token, "dibya", (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    req.user = user;
-    next();
-  });
-}
 
 // Update task details
 const updateTaskDetails = async (req, res) => {
@@ -711,7 +576,6 @@ const sendOTP = async (req, res) => {
   }
 };
 
-// Check-in
 const checkIn = async (req, res) => {
   const { userId, check_in_location } = req.body;
 
@@ -723,13 +587,19 @@ const checkIn = async (req, res) => {
 
     const { date, time } = getCurrentDateAndTime();
 
-    user.attendance.push({
+    let attendance = await Attendance.findOne({ userId, date });
+
+    if (!attendance) {
+      attendance = new Attendance({ userId, date, checkInOuts: [] });
+    }
+
+    attendance.checkInOuts.push({
       check_in_time: time,
-      check_in_date: date,
-      check_in_location: check_in_location,
+      check_in_location,
+      check_in_date: date
     });
 
-    await user.save();
+    await attendance.save();
     return res.status(200).json({ status: 1, message: "Check-in successful" });
   } catch (error) {
     console.error(error);
@@ -737,7 +607,7 @@ const checkIn = async (req, res) => {
   }
 };
 
-// Check-out
+
 const checkOut = async (req, res) => {
   const { userId, check_out_location, workHours } = req.body;
 
@@ -749,19 +619,27 @@ const checkOut = async (req, res) => {
 
     const { date, time } = getCurrentDateAndTime();
 
-    const latestAttendance = user.attendance[user.attendance.length - 1];
-    if (!latestAttendance || latestAttendance.check_out_time) {
-      return res
-        .status(400)
-        .json({ status: 0, error: "No valid check-in found" });
+    // Find the latest attendance record
+    const attendance = await Attendance.findOne({ userId }).sort({ date: -1 });
+    if (!attendance || attendance.checkInOuts.length === 0) {
+      return res.status(400).json({ status: 0, error: "No valid check-in found" });
     }
 
-    latestAttendance.check_out_time = time;
-    latestAttendance.check_out_date = date;
-    latestAttendance.check_out_location = check_out_location;
-    latestAttendance.workHours = workHours;
+    const latestCheckInOut = attendance.checkInOuts[attendance.checkInOuts.length - 1];
+    if (latestCheckInOut.check_out_time) {
+      return res.status(400).json({ status: 0, error: "No valid check-in found" });
+    }
 
-    await user.save();
+    // Calculate check-out date (can be different from check-in date)
+    const now = new Date();
+    const checkOutDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+
+    latestCheckInOut.check_out_time = time;
+    latestCheckInOut.check_out_date = checkOutDate;
+    latestCheckInOut.check_out_location = check_out_location;
+    latestCheckInOut.workHours = workHours;
+
+    await attendance.save();
     return res.status(200).json({ status: 1, message: "Check-out successful" });
   } catch (error) {
     console.error(error);
@@ -769,18 +647,14 @@ const checkOut = async (req, res) => {
   }
 };
 
-// Get check-in status
+
 const getCheckStatus = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const latestAttendance = user.attendance[user.attendance.length - 1];
-    const isCheckedIn = latestAttendance && !latestAttendance.check_out_time;
+    const attendance = await Attendance.findOne({ userId }).sort({ date: -1 });
+    const isCheckedIn = attendance && attendance.checkInOuts.length > 0 &&
+      !attendance.checkInOuts[attendance.checkInOuts.length - 1].check_out_time;
 
     res.status(200).json({ isCheckedIn });
   } catch (error) {
@@ -789,22 +663,30 @@ const getCheckStatus = async (req, res) => {
   }
 };
 
-// Get elapsed time
+
+
 const getElapsedTime = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const attendanceRecords = await Attendance.find({ userId }).sort({ date: -1 });
 
-    const latestAttendance = user.attendance[user.attendance.length - 1];
-    if (!latestAttendance || latestAttendance.check_out_time) {
+    if (!attendanceRecords || attendanceRecords.length === 0) {
       return res.status(400).json({ error: "No active check-in found" });
     }
 
-    const elapsedTime = calculateElapsedTime(latestAttendance.check_in_time);
+    // Find the latest incomplete check-in/check-out session
+    let latestCheckInOut = null;
+    for (const record of attendanceRecords) {
+      latestCheckInOut = record.checkInOuts.find(session => !session.check_out_time);
+      if (latestCheckInOut) break;
+    }
+
+    if (!latestCheckInOut) {
+      return res.status(400).json({ error: "No active check-in found" });
+    }
+
+    const elapsedTime = calculateElapsedTime(latestCheckInOut.check_in_time);
 
     res.status(200).json({ elapsedTime });
   } catch (error) {
@@ -812,6 +694,203 @@ const getElapsedTime = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+
+const generateSortedDatesByMonth = (dateOfJoin, currentDate) => {
+  try {
+    // Ensure dateOfJoin and currentDate are in DD-MM-YYYY format
+    const [joinDay, joinMonth, joinYear] = dateOfJoin.split('-').map(Number);
+    const [currentDay, currentMonth, currentYear] = currentDate.split('-').map(Number);
+
+    const dates = [];
+    for (let year = joinYear; year <= currentYear; year++) {
+      const startMonth = year === joinYear ? joinMonth : 1;
+      const endMonth = year === currentYear ? currentMonth : 12;
+
+      for (let month = startMonth; month <= endMonth; month++) {
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const startDay = year === joinYear && month === joinMonth ? joinDay : 1;
+        const endDay = year === currentYear && month === currentMonth ? currentDay : daysInMonth;
+
+        for (let day = startDay; day <= endDay; day++) {
+          const formattedDay = String(day).padStart(2, '0');
+          const formattedMonth = String(month).padStart(2, '0');
+          const formattedYear = String(year);
+          dates.push(`${formattedDay}-${formattedMonth}-${formattedYear}`);
+        }
+      }
+    }
+    return dates;
+  } catch (error) {
+    console.error("Error parsing dates:", error);
+    return [];
+  }
+};
+
+const generateAttendanceReport = async (req, res) => {
+  const { employeeId } = req.params;
+
+  try {
+    // Find the user by employee ID
+    const user = await User.findOne({ employeeID: employeeId });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Parse date_of_join and current date
+    const dateOfJoin = user.date_of_join;
+    const currentDate = getCurrentDateAndTime().date;
+
+    // Generate dates by month
+    const dates = generateSortedDatesByMonth(dateOfJoin, currentDate);
+
+    // Organize dates by month names
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const datesByMonth = {};
+    for (const date of dates) {
+      const [day, month, year] = date.split('-').map(Number);
+      const monthName = monthNames[month - 1];
+      const key = `${monthName}-${year}`;
+      if (!datesByMonth[key]) {
+        datesByMonth[key] = [];
+      }
+      datesByMonth[key].push(date);
+    }
+
+    // Find the attendance records for the employee
+    const attendanceRecords = {};
+    const checkInOutSessions = {};
+    const attendance = await Attendance.find({ userId: user._id });
+
+    // Function to convert decimal hours to HH:mm:ss format
+    function decimalHoursToHHMMSS(decimalHours) {
+      const hours = Math.floor(decimalHours);
+      const minutes = Math.floor((decimalHours - hours) * 60);
+      const seconds = Math.floor((decimalHours - hours - (minutes / 60)) * 3600);
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    // Function to calculate minutes late and return formatted string
+    function calculateMinutesLate(expectedTime, actualTime) {
+      const [expectedHours, expectedMinutes] = parseTime(expectedTime);
+      const [actualHours, actualMinutes] = parseTime(actualTime);
+      
+      const expectedTotalMinutes = expectedHours * 60 + expectedMinutes;
+      const actualTotalMinutes = actualHours * 60 + actualMinutes;
+      
+      const minutesLate = actualTotalMinutes > expectedTotalMinutes ? actualTotalMinutes - expectedTotalMinutes : 0;
+  
+      // Format minutes late as "Late by HH:MM"
+      const hoursLate = Math.floor(minutesLate / 60);
+      const minsLate = minutesLate % 60;
+      return `Late by ${String(hoursLate).padStart(2, '0')}:${String(minsLate).padStart(2, '0')}`;
+    }
+  
+    // Function to calculate minutes early and return formatted string
+    function calculateMinutesEarly(expectedTime, actualTime) {
+      const [expectedHours, expectedMinutes] = parseTime(expectedTime);
+      const [actualHours, actualMinutes] = parseTime(actualTime);
+      
+      const expectedTotalMinutes = expectedHours * 60 + expectedMinutes;
+      const actualTotalMinutes = actualHours * 60 + actualMinutes;
+      
+      const minutesEarly = expectedTotalMinutes > actualTotalMinutes ? expectedTotalMinutes - actualTotalMinutes : 0;
+  
+      // Format minutes early as "Early by HH:MM"
+      const hoursEarly = Math.floor(minutesEarly / 60);
+      const minsEarly = minutesEarly % 60;
+      return `Early by ${String(hoursEarly).padStart(2, '0')}:${String(minsEarly).padStart(2, '0')}`;
+    }
+
+    // Function to parse time in hh:mm:ss AM/PM format
+    function parseTime(timeString) {
+      const [time, period] = timeString.split(' ');
+      const [hours, minutes, seconds] = time.split(':').map(Number);
+      let parsedHours = hours;
+      if (period === 'PM' && hours < 12) {
+        parsedHours += 12;
+      } else if (period === 'AM' && hours === 12) {
+        parsedHours = 0;
+      }
+      return [parsedHours, minutes, seconds];
+    }
+
+    for (const monthYear in datesByMonth) {
+      const monthDates = datesByMonth[monthYear];
+      attendanceRecords[monthYear] = {};
+      checkInOutSessions[monthYear] = {};
+
+      for (const date of monthDates) {
+        const checkInOut = attendance.find(record => record.checkInOuts.some(session => session.check_in_date === date));
+        if (checkInOut && checkInOut.checkInOuts.length > 0) {
+          // Calculate total work hours
+          let totalWorkHours = 0;
+          checkInOutSessions[monthYear][date] = {
+            sessions: checkInOut.checkInOuts,
+            totalWorkHours: null // Initialize total work hours
+          };
+
+          // Iterate through each session of the day and sum up work hours
+          for (const session of checkInOut.checkInOuts) {
+            if (session.workHours) {
+              // Assuming workHours is in the format HH:mm:ss, parse and add to total
+              const [hours, minutes, seconds] = session.workHours.split(':').map(Number);
+              totalWorkHours += hours + (minutes / 60) + (seconds / 3600);
+            }
+          }
+
+          // Set total work hours in HH:mm:ss format
+          const totalWorkHoursHHMMSS = decimalHoursToHHMMSS(totalWorkHours);
+          checkInOutSessions[monthYear][date].totalWorkHours = totalWorkHoursHHMMSS;
+
+          // Calculate late minutes and early minutes
+          let lateMinutes = 0;
+          let earlyMinutes = 0;
+
+          for (const session of checkInOut.checkInOuts) {
+            if (session.check_in_time) {
+              lateMinutes += calculateMinutesLate("09:30:00 AM", session.check_in_time);
+              earlyMinutes += calculateMinutesEarly("09:30:00 AM", session.check_in_time);
+            }
+            if (session.check_out_time) {
+              lateMinutes += calculateMinutesLate("06:30:00 PM", session.check_out_time);
+              earlyMinutes += calculateMinutesEarly("06:30:00 PM", session.check_out_time);
+            }
+          }
+
+          // Determine attendance based on total work hours
+          let attendanceStatus = "Absent";
+          if (totalWorkHours >= 9) {
+            attendanceStatus = "Present";
+          } else if (totalWorkHours > 0) {
+            attendanceStatus = "0.5 Present, 0.5 Absent";
+          }
+
+          // Add late and early minutes to attendance record
+          attendanceRecords[monthYear][date] = `${attendanceStatus}, Late Minutes: ${lateMinutes}, Early Minutes: ${earlyMinutes}, Total Work Hours: ${totalWorkHoursHHMMSS}`;
+        } else {
+          attendanceRecords[monthYear][date] = "Absent";
+          checkInOutSessions[monthYear][date] = {
+            sessions: [],
+            totalWorkHours: null
+          };
+        }
+      }
+    }
+
+    res.status(200).json({ attendanceRecords, checkInOutSessions });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
+
+
+
+
+
 
 module.exports = {
   verifyIDAndRecordAttendance,
@@ -835,6 +914,7 @@ module.exports = {
   getElapsedTime,
   getAllUsers,
   assignAdminRole,
-  uploadAvatar,
-  assignTask
+  assignTask,
+  generateSortedDatesByMonth,
+  generateAttendanceReport
 };
