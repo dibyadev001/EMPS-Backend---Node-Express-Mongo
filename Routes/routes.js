@@ -80,6 +80,14 @@ router.put("/assign-task/:userId", authenticateToken, assignTask);
 // router.get("/attendanceReport/:employeeId", authenticateToken, generateSortedDatesByMonth);
 router.get("/api/attendanceReport/:employeeId", authenticateToken, generateAttendanceReport);
 
+router.get('/check-token', authenticateToken, (req, res) => {
+  try {
+    const isAdmin = req.user.isAdmin;
+    res.json({ isAdmin });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 
 module.exports = router;
